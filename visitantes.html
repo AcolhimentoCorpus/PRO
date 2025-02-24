@@ -24,6 +24,9 @@
       padding: 10px;
       border: 1px solid #ddd;
       text-align: left;
+      white-space: normal; /* Permite que o texto quebre em várias linhas */
+      word-wrap: break-word; /* Quebra palavras longas */
+      min-width: 100px; /* Largura mínima das colunas */
     }
     th {
       background-color: black; /* Fundo preto */
@@ -116,15 +119,17 @@
       return numero.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
     }
 
-    // Função para formatar datas
+    // Função para formatar datas e incluir o dia da semana
     function formatarData(dataISO) {
       const data = new Date(dataISO);
+      const diasSemana = ["Domingo", "Segunda-Feira", "Terça-Feira", "Quarta-Feira", "Quinta-Feira", "Sexta-Feira", "Sábado"];
       const dia = String(data.getDate()).padStart(2, '0');
       const mes = String(data.getMonth() + 1).padStart(2, '0');
       const ano = data.getFullYear();
+      const diaSemana = diasSemana[data.getDay()];
       const horas = String(data.getHours()).padStart(2, '0');
       const minutos = String(data.getMinutes()).padStart(2, '0');
-      return `${dia}/${mes}/${ano} ${horas}:${minutos}`;
+      return `${dia}/${mes}/${ano} - ${diaSemana} ${horas}:${minutos}`;
     }
 
     // Função para aplicar a classe de status à linha
@@ -156,7 +161,7 @@
       const container = document.createElement('div');
       container.classList.add('bloco-data');
 
-      // Título do bloco (data)
+      // Título do bloco (data com dia da semana)
       const titulo = document.createElement('h2');
       titulo.textContent = dataFormatada;
       container.appendChild(titulo);
