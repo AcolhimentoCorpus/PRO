@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visitantes</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+      margin: 20px;
+    }
+    h1 {
+      color: #333;
+      text-align: center;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+    th {
+      background-color: black; /* Fundo preto */
+      color: white; /* Letras brancas */
+    }
+    a {
+      color: #007BFF;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    select {
+      width: 100%;
+      padding: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    /* Cores dos status */
+    .status-pendente {
+      background-color: #ffcccc; /* Vermelho claro */
+    }
+    .status-outros {
+      background-color: #cce5ff; /* Azul claro */
+    }
+    /* Espaço entre blocos de data */
+    .bloco-data {
+      margin-bottom: 20px;
+    }
+    .bloco-data h2 {
+      background-color: black; /* Fundo preto */
+      color: white;
+      padding: 10px;
+      margin: 0;
+      border-radius: 4px 4px 0 0;
+    }
+    /* Botões */
+    .botoes {
+      display: flex;
+      justify-content: center;
+      gap: 10px; /* Espaço entre os botões */
+      margin-bottom: 20px;
+    }
+    .botao {
+      padding: 10px 20px;
+      background-color: #808080; /* Cinza */
+      color: white; /* Letras brancas */
+      border: none;
+      border-radius: 4px;
+      font-size: 1em;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .botao:hover {
+      background-color: #666; /* Efeito hover */
+    }
+    /* Indicador de carregamento */
+    #loading {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 1.2em;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <h1>Visitantes</h1>
+  <div class="botoes">
+    <button id="atualizar-tabela" class="botao">Atualizar Tabela</button>
+    <button id="download-pdf" class="botao">Download PDF</button>
+  </div>
+  <div id="loading">Carregando dados...</div>
+  <div id="tabela-container"></div>
+
+  <script>
+    // URL do seu Google Apps Script (substitua pelo seu link)
+    const url = 'https://script.google.com/macros/s/AKfycbxAh97IxyE93Xq_HWoJtg9fwOAaGU1AS56nI1F5eS95PtKQW7OQ9TCAHMMl1N82WES_NQ/exec';
+
+    // Função para formatar números de telefone
+    function formatarTelefone(numero) {
+      numero = String(numero || '');
+      numero = numero.replace(/\D/g, '');
+      return numero.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+    }
+
+    // Função para formatar datas
+    function formatarData(dataISO) {
+      const data = new Date(dataISO);
+      const dia = String(data.getDate()).padStart(2, '0');
+      const mes = String(data.getMonth() + 1).padStart(2, '0');
+      const ano = data.getFullYear();
+      const horas = String(data.getHours()).padStart(2, '0');
+      const minutos = String(data.getMinutes()).padStart(2, '0');
+      return `${dia}/${mes}/${ano} ${horas}:${minutos}`;
+    }
+
+    // Função para aplicar a classe de status à linha
+    function aplicarClasseStatus(tr, status) {
+      tr.classList.remove('status-pendente', 'status-outros');
+      if (status === 'Pendente') {
+        tr.classList.add('status-pendente');
+      } else {
+        tr.classList.add('status-outros');
+      }
+    }
+
+    // Função para agrupar dados por data
+    function agruparPorData(data) {
+      const grupos = {};
+      data.slice(1).forEach(row => {
+        const dataISO = row[0]; // Supondo que a data está na primeira coluna
+        const dataFormatada = dataISO ? formatarData(dataISO).split(' ')[0] : 'Sem data'; // Extrai apenas a data (sem hora)
+        if (!grupos[dataFormatada]) {
+          grupos[dataFormatada] = [];
+        }
+        grupos[dataFormatada].push(row);
+      });
+      return grupos;
+    }
+
+    // Função para criar uma tabela para um bloco de data
+    function criarTabelaParaData(dataFormatada, linhas, headers) {
+      const container = document.createElement('div');
+      container.classList.add('bloco-data');
+
+      // Título do bloco (data)
+      const titulo = document.createElement('h2');
+      titulo.textContent = dataFormatada;
+      container.appendChild(titulo);
+
+      // Tabela
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const tbody = document.createElement('tbody');
+
+      // Cria o cabeçalho da tabela
+      const trHead = document.createElement('tr');
+
+      // Adiciona a coluna de status como primeira coluna
+      const thStatus = document.createElement('th');
+      thStatus.textContent = 'Status';
+      trHead.appendChild(thStatus);
+
+      // Adiciona os demais cabeçalhos (exceto a coluna de data)
+      headers.forEach((header, index) => {
+        if (header !== 'Carimbo de data/hora') {
+          const th = document.createElement('th');
+          if (header === 'De onde é?') {
+            th.textContent = 'De onde é'; // Remove a interrogação
+          } else {
+            th.textContent = header;
+          }
+          trHead.appendChild(th);
+        }
+      });
+
+      // Adiciona a coluna de data
+      const thData = document.createElement('th');
+      thData.textContent = 'Data';
+      trHead.appendChild(thData);
+
+      // Adiciona a coluna de comentário
+      const thComentario = document.createElement('th');
+      thComentario.textContent = 'Comentário';
+      trHead.appendChild(thComentario);
+
+      thead.appendChild(trHead);
+      table.appendChild(thead);
+
+      // Preenche a tabela com os dados
+      linhas.forEach(row => {
+        const tr = document.createElement('tr');
+
+        // Adiciona a coluna de status como primeira coluna
+        const tdStatus = document.createElement('td');
+        const select = document.createElement('select');
+        const options = ['Pendente', 'Em contato com Caio', 'Em contato com Pb. André'];
+        options.forEach(option => {
+          const opt = document.createElement('option');
+          opt.value = option;
+          opt.textContent = option;
+          select.appendChild(opt);
+        });
+        select.value = 'Pendente';
+        tdStatus.appendChild(select);
+        tr.appendChild(tdStatus);
+
+        // Aplica a classe de status inicial
+        aplicarClasseStatus(tr, select.value);
+
+        // Atualiza a cor da linha quando o status é alterado
+        select.addEventListener('change', () => {
+          aplicarClasseStatus(tr, select.value);
+        });
+
+        // Adiciona as demais colunas (exceto a coluna de data)
+        row.forEach((cell, index) => {
+          if (headers[index] !== 'Carimbo de data/hora') {
+            const td = document.createElement('td');
+            if (headers[index] === 'Telefone' && cell && /^\d+$/.test(String(cell))) {
+              td.innerHTML = `<a href="tel:${cell}">${formatarTelefone(cell)}</a>`;
+            } else {
+              td.textContent = cell;
+            }
+            tr.appendChild(td);
+          }
+        });
+
+        // Adiciona a coluna de data
+        const tdData = document.createElement('td');
+        tdData.textContent = formatarData(row[0]); // Formata a data
+        tr.appendChild(tdData);
+
+        // Adiciona a coluna de comentário
+        const tdComentario = document.createElement('td');
+        const inputComentario = document.createElement('input');
+        inputComentario.type = 'text';
+        inputComentario.placeholder = 'Digite um comentário...';
+        tdComentario.appendChild(inputComentario);
+        tr.appendChild(tdComentario);
+
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(tbody);
+      container.appendChild(table);
+      return container;
+    }
+
+    // Função para buscar e exibir os dados
+    async function fetchData() {
+      try {
+        const loading = document.getElementById('loading');
+        loading.textContent = 'Carregando dados...';
+
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error('Erro ao carregar os dados');
+        }
+        const data = await response.json();
+        const container = document.getElementById('tabela-container');
+        container.innerHTML = '';
+
+        // Agrupa os dados por data
+        const grupos = agruparPorData(data);
+
+        // Cria um bloco de tabela para cada data
+        for (const dataFormatada in grupos) {
+          const bloco = criarTabelaParaData(dataFormatada, grupos[dataFormatada], data[0]);
+          container.appendChild(bloco);
+        }
+
+        loading.textContent = ''; // Remove o indicador de carregamento
+      } catch (error) {
+        console.error('Erro:', error);
+        alert('Não foi possível carregar os dados. Verifique a URL ou tente novamente mais tarde.');
+      }
+    }
+
+    // Função para gerar PDF
+    function gerarPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      // Adiciona o título ao PDF
+      doc.setFontSize(18);
+      doc.text("Relatório de Visitantes", 10, 10);
+
+      // Adiciona a tabela ao PDF
+      const tabela = document.getElementById('tabela-container');
+      doc.html(tabela, {
+        callback: function (doc) {
+          doc.save('relatorio_visitantes.pdf');
+        },
+        x: 10,
+        y: 20,
+      });
+    }
+
+    // Carrega os dados ao abrir a página
+    fetchData();
+
+    // Botão de atualização manual
+    document.getElementById('atualizar-tabela').addEventListener('click', fetchData);
+
+    // Botão de download PDF
+    document.getElementById('download-pdf').addEventListener('click', gerarPDF);
+  </script>
+  <!-- Biblioteca jsPDF para gerar PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</body>
+</html>
