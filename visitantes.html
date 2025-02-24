@@ -24,9 +24,9 @@
       padding: 10px;
       border: 1px solid #ddd;
       text-align: left;
-      white-space: normal; /* Permite que o texto quebre em várias linhas */
-      word-wrap: break-word; /* Quebra palavras longas */
-      min-width: 100px; /* Largura mínima das colunas */
+      white-space: nowrap; /* Impede a quebra de linha */
+      overflow: hidden; /* Esconde o conteúdo que ultrapassa */
+      text-overflow: ellipsis; /* Adiciona "..." se o texto for muito longo */
     }
     th {
       background-color: black; /* Fundo preto */
@@ -127,9 +127,7 @@
       const mes = String(data.getMonth() + 1).padStart(2, '0');
       const ano = data.getFullYear();
       const diaSemana = diasSemana[data.getDay()];
-      const horas = String(data.getHours()).padStart(2, '0');
-      const minutos = String(data.getMinutes()).padStart(2, '0');
-      return `${dia}/${mes}/${ano} - ${diaSemana} ${horas}:${minutos}`;
+      return `${dia}/${mes}/${ano} - ${diaSemana}`;
     }
 
     // Função para aplicar a classe de status à linha
@@ -147,7 +145,7 @@
       const grupos = {};
       data.slice(1).forEach(row => {
         const dataISO = row[0]; // Supondo que a data está na primeira coluna
-        const dataFormatada = dataISO ? formatarData(dataISO).split(' ')[0] : 'Sem data'; // Extrai apenas a data (sem hora)
+        const dataFormatada = dataISO ? formatarData(dataISO) : 'Sem data'; // Formata a data com o dia da semana
         if (!grupos[dataFormatada]) {
           grupos[dataFormatada] = [];
         }
