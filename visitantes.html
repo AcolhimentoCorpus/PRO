@@ -5,257 +5,245 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Visitantes</title>
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
     body {
       font-family: Arial, sans-serif;
       background-color: #f4f4f4;
-      margin: 20px;
+      padding: 20px;
+      overflow-x: auto;
+      min-width: fit-content;
     }
+
     h1 {
       color: #333;
       text-align: center;
+      margin-bottom: 20px;
     }
+
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 20px;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      margin: 20px 0;
+      table-layout: auto;
     }
+
     th, td {
-      padding: 10px;
+      padding: 15px;
       border: 1px solid #ddd;
       text-align: left;
-      white-space: nowrap; /* Impede a quebra de linha */
-      overflow: hidden; /* Esconde o conteúdo que ultrapassa */
-      text-overflow: ellipsis; /* Adiciona "..." se o texto for muito longo */
+      white-space: nowrap;
+      min-width: auto !important;
+      max-width: none !important;
     }
+
     th {
-      background-color: black; /* Fundo preto */
-      color: white; /* Letras brancas */
+      background-color: #000;
+      color: #fff;
+      position: sticky;
+      top: 0;
     }
-    a {
-      color: #007BFF;
-      text-decoration: none;
-    }
-    a:hover {
-      text-decoration: underline;
-    }
+
     select {
-      width: 100%;
-      padding: 5px;
-      border: 1px solid #ccc;
+      min-width: 200px;
+      padding: 8px;
+      border: 2px solid #007BFF;
       border-radius: 4px;
+      background: white;
       cursor: pointer;
     }
-    input[type="text"] {
-      width: 100%;
-      padding: 5px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
-    /* Cores dos status */
-    .status-pendente {
-      background-color: #ffcccc; /* Vermelho claro */
-    }
-    .status-outros {
-      background-color: #cce5ff; /* Azul claro */
-    }
-    /* Espaço entre blocos de data */
-    .bloco-data {
-      margin-bottom: 20px;
-    }
-    .bloco-data h2 {
-      background-color: black; /* Fundo preto */
-      color: white;
-      padding: 10px;
-      margin: 0;
-      border-radius: 4px 4px 0 0;
-    }
-    /* Botões */
+
     .botoes {
       display: flex;
-      justify-content: center;
-      gap: 10px; /* Espaço entre os botões */
+      gap: 10px;
       margin-bottom: 20px;
+      justify-content: center;
     }
+
     .botao {
-      padding: 10px 20px;
-      background-color: #808080; /* Cinza */
-      color: white; /* Letras brancas */
+      padding: 12px 24px;
+      background: #666;
+      color: white;
       border: none;
-      border-radius: 4px;
-      font-size: 1em;
+      border-radius: 5px;
       cursor: pointer;
-      text-decoration: none;
     }
-    .botao:hover {
-      background-color: #666; /* Efeito hover */
+
+    .status-pendente { background-color: #ffcccc; }
+    .status-outros { background-color: #cce5ff; }
+
+    .bloco-data {
+      margin: 30px 0;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    /* Indicador de carregamento */
+
+    .bloco-data h2 {
+      padding: 15px;
+      background: #333;
+      color: white;
+      border-radius: 8px 8px 0 0;
+    }
+
     #loading {
       text-align: center;
-      margin-top: 20px;
-      font-size: 1.2em;
-      color: #333;
+      padding: 20px;
+      color: #666;
     }
   </style>
 </head>
 <body>
   <h1>Visitantes</h1>
   <div class="botoes">
-    <button id="atualizar-tabela" class="botao">Atualizar Tabela</button>
-    <button id="download-pdf" class="botao">Download PDF</button>
+    <button id="atualizar-tabela" class="botao">⟳ Atualizar</button>
   </div>
   <div id="loading">Carregando dados...</div>
   <div id="tabela-container"></div>
 
   <script>
-    // URL do seu Google Apps Script (substitua pelo seu link)
-    const url = 'https://script.google.com/macros/s/AKfycbxAh97IxyE93Xq_HWoJtg9fwOAaGU1AS56nI1F5eS95PtKQW7OQ9TCAHMMl1N82WES_NQ/exec';
+    const url = 'https://script.google.com/macros/s/AKfycbwj4KjrRP_DJiqqQsfcj1ri-K3zjc6Wx_PXmqBY6Z6V9IqivH-ceD6wX8gsbonnBtTFyg/exec';
+    const STORAGE_KEY = 'visitantes_data';
 
-    // Função para formatar números de telefone
-    function formatarTelefone(numero) {
-      numero = String(numero || '');
-      numero = numero.replace(/\D/g, '');
-      return numero.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-    }
+    let cache = {
+      data: null,
+      timestamp: null,
+      alteracoes: JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}
+    };
 
-    // Função para formatar datas e incluir o dia da semana
-    function formatarData(dataISO) {
-      const data = new Date(dataISO);
-      const diasSemana = ["Domingo", "Segunda-Feira", "Terça-Feira", "Quarta-Feira", "Quinta-Feira", "Sexta-Feira", "Sábado"];
-      const dia = String(data.getDate()).padStart(2, '0');
-      const mes = String(data.getMonth() + 1).padStart(2, '0');
-      const ano = data.getFullYear();
-      const diaSemana = diasSemana[data.getDay()];
-      return `${dia}/${mes}/${ano} - ${diaSemana}`;
-    }
-
-    // Função para aplicar a classe de status à linha
-    function aplicarClasseStatus(tr, status) {
-      tr.classList.remove('status-pendente', 'status-outros');
-      if (status === 'Pendente') {
-        tr.classList.add('status-pendente');
-      } else {
-        tr.classList.add('status-outros');
+    // Função para renderizar os dados na tabela
+    function renderData(data) {
+      const container = document.getElementById('tabela-container');
+      container.innerHTML = '';
+      
+      try {
+        const grupos = agruparPorData(data);
+        
+        for (const [dataFormatada, linhas] of Object.entries(grupos)) {
+          const bloco = criarBlocoData(dataFormatada, linhas, data[0]);
+          container.appendChild(bloco);
+        }
+      } catch (e) {
+        container.innerHTML = '<p>Erro ao processar dados</p>';
       }
     }
 
-    // Função para agrupar dados por data
+    // Função para agrupar os dados por data
     function agruparPorData(data) {
       const grupos = {};
+      
       data.slice(1).forEach(row => {
-        const dataISO = row[0]; // Supondo que a data está na primeira coluna
-        const dataFormatada = dataISO ? formatarData(dataISO) : 'Sem data'; // Formata a data com o dia da semana
-        if (!grupos[dataFormatada]) {
-          grupos[dataFormatada] = [];
+        try {
+          const dataISO = row[0] || new Date().toISOString();
+          const dataFormatada = new Date(dataISO).toLocaleDateString('pt-BR', {
+            weekday: 'long',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+          });
+          
+          if (!grupos[dataFormatada]) grupos[dataFormatada] = [];
+          grupos[dataFormatada].push(row);
+        } catch {
+          console.warn('Linha ignorada:', row);
         }
-        grupos[dataFormatada].push(row);
       });
+      
       return grupos;
     }
 
-    // Função para criar uma tabela para um bloco de data
-    function criarTabelaParaData(dataFormatada, linhas, headers) {
+    // Função para criar um bloco de dados
+    function criarBlocoData(dataFormatada, linhas, headers) {
       const container = document.createElement('div');
-      container.classList.add('bloco-data');
+      container.className = 'bloco-data';
 
-      // Título do bloco (data com dia da semana)
       const titulo = document.createElement('h2');
       titulo.textContent = dataFormatada;
       container.appendChild(titulo);
 
-      // Tabela
       const table = document.createElement('table');
       const thead = document.createElement('thead');
       const tbody = document.createElement('tbody');
 
-      // Cria o cabeçalho da tabela
+      // Cabeçalho
       const trHead = document.createElement('tr');
-
-      // Adiciona a coluna de status como primeira coluna
-      const thStatus = document.createElement('th');
-      thStatus.textContent = 'Status';
-      trHead.appendChild(thStatus);
-
-      // Adiciona os demais cabeçalhos (exceto a coluna de data)
-      headers.forEach((header, index) => {
-        if (header !== 'Carimbo de data/hora') {
-          const th = document.createElement('th');
-          if (header === 'De onde é?') {
-            th.textContent = 'De onde é'; // Remove a interrogação
-          } else {
-            th.textContent = header;
-          }
-          trHead.appendChild(th);
-        }
+      ['Status', ...headers.slice(1), 'Data', 'Comentário'].forEach(header => {
+        const th = document.createElement('th');
+        th.textContent = header === 'De onde é?' ? 'De onde é' : header;
+        trHead.appendChild(th);
       });
-
-      // Adiciona a coluna de data
-      const thData = document.createElement('th');
-      thData.textContent = 'Data';
-      trHead.appendChild(thData);
-
-      // Adiciona a coluna de comentário
-      const thComentario = document.createElement('th');
-      thComentario.textContent = 'Comentário';
-      trHead.appendChild(thComentario);
-
       thead.appendChild(trHead);
       table.appendChild(thead);
 
-      // Preenche a tabela com os dados
-      linhas.forEach(row => {
-        const tr = document.createElement('tr');
+      // Linhas
+      linhas.forEach((row, rowIndex) => {
+        try {
+          const tr = document.createElement('tr');
+          const idLinha = row[0]; // ID da linha (timestamp)
 
-        // Adiciona a coluna de status como primeira coluna
-        const tdStatus = document.createElement('td');
-        const select = document.createElement('select');
-        const options = ['Pendente', 'Em contato com Caio', 'Em contato com Pb. André'];
-        options.forEach(option => {
-          const opt = document.createElement('option');
-          opt.value = option;
-          opt.textContent = option;
-          select.appendChild(opt);
-        });
-        select.value = 'Pendente';
-        tdStatus.appendChild(select);
-        tr.appendChild(tdStatus);
+          // Status
+          const tdStatus = document.createElement('td');
+          const select = document.createElement('select');
+          
+          // Opções do dropdown
+          [
+            'Pendente', 
+            'Em contato com Caio', 
+            'Em contato com Pb. André'
+          ].forEach(opcao => {
+            const option = document.createElement('option');
+            option.textContent = opcao;
+            option.selected = (row[7] === opcao); // Coluna H (status)
+            select.appendChild(option);
+          });
 
-        // Aplica a classe de status inicial
-        aplicarClasseStatus(tr, select.value);
+          // Evento para salvar alteração
+          select.addEventListener('change', () => {
+            salvarAlteracoes(idLinha, 'status', select.value);
+          });
 
-        // Atualiza a cor da linha quando o status é alterado
-        select.addEventListener('change', () => {
-          aplicarClasseStatus(tr, select.value);
-        });
+          tdStatus.appendChild(select);
+          tr.appendChild(tdStatus);
 
-        // Adiciona as demais colunas (exceto a coluna de data)
-        row.forEach((cell, index) => {
-          if (headers[index] !== 'Carimbo de data/hora') {
+          // Dados
+          row.slice(1).forEach((cell, index) => {
             const td = document.createElement('td');
-            if (headers[index] === 'Telefone' && cell && /^\d+$/.test(String(cell))) {
+            if (headers[index + 1] === 'Telefone') {
               td.innerHTML = `<a href="tel:${cell}">${formatarTelefone(cell)}</a>`;
             } else {
               td.textContent = cell;
             }
             tr.appendChild(td);
-          }
-        });
+          });
 
-        // Adiciona a coluna de data
-        const tdData = document.createElement('td');
-        tdData.textContent = formatarData(row[0]); // Formata a data
-        tr.appendChild(tdData);
+          // Data
+          const tdData = document.createElement('td');
+          tdData.textContent = formatarData(row[0]);
+          tr.appendChild(tdData);
 
-        // Adiciona a coluna de comentário
-        const tdComentario = document.createElement('td');
-        const inputComentario = document.createElement('input');
-        inputComentario.type = 'text';
-        inputComentario.placeholder = 'Digite um comentário...';
-        tdComentario.appendChild(inputComentario);
-        tr.appendChild(tdComentario);
+          // Comentário
+          const tdComentario = document.createElement('td');
+          const inputComentario = document.createElement('input');
+          inputComentario.type = 'text';
+          inputComentario.placeholder = 'Digite...';
+          inputComentario.value = row[8] || ''; // Coluna I (comentário)
 
-        tbody.appendChild(tr);
+          // Evento para salvar alteração
+          inputComentario.addEventListener('input', () => {
+            salvarAlteracoes(idLinha, 'comentario', inputComentario.value);
+          });
+
+          tdComentario.appendChild(inputComentario);
+          tr.appendChild(tdComentario);
+
+          tbody.appendChild(tr);
+        } catch (error) {
+          console.error('Erro ao criar linha:', error);
+        }
       });
 
       table.appendChild(tbody);
@@ -263,66 +251,104 @@
       return container;
     }
 
-    // Função para buscar e exibir os dados
-    async function fetchData() {
+    // Função para formatar telefone
+    function formatarTelefone(numero) {
       try {
-        const loading = document.getElementById('loading');
-        loading.textContent = 'Carregando dados...';
-
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error('Erro ao carregar os dados');
-        }
-        const data = await response.json();
-        const container = document.getElementById('tabela-container');
-        container.innerHTML = '';
-
-        // Agrupa os dados por data
-        const grupos = agruparPorData(data);
-
-        // Cria um bloco de tabela para cada data
-        for (const dataFormatada in grupos) {
-          const bloco = criarTabelaParaData(dataFormatada, grupos[dataFormatada], data[0]);
-          container.appendChild(bloco);
-        }
-
-        loading.textContent = ''; // Remove o indicador de carregamento
-      } catch (error) {
-        console.error('Erro:', error);
-        alert('Não foi possível carregar os dados. Verifique a URL ou tente novamente mais tarde.');
+        const nums = String(numero).replace(/\D/g, '');
+        return nums.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+      } catch {
+        return numero;
       }
     }
 
-    // Função para gerar PDF
-    function gerarPDF() {
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
-
-      // Adiciona o título ao PDF
-      doc.setFontSize(18);
-      doc.text("Relatório de Visitantes", 10, 10);
-
-      // Adiciona a tabela ao PDF
-      const tabela = document.getElementById('tabela-container');
-      doc.html(tabela, {
-        callback: function (doc) {
-          doc.save('relatorio_visitantes.pdf');
-        },
-        x: 10,
-        y: 20,
-      });
+    // Função para formatar data
+    function formatarData(dataISO) {
+      try {
+        const data = new Date(dataISO);
+        return data.toLocaleString('pt-BR');
+      } catch {
+        return 'Data inválida';
+      }
     }
 
-    // Carrega os dados ao abrir a página
-    fetchData();
+    // Função para salvar alterações
+    async function salvarAlteracoes(idLinha, campo, valor) {
+      try {
+        // Envia para o Google Apps Script
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            id: idLinha, // ID da linha (timestamp)
+            campo,       // Campo a ser atualizado (status ou comentario)
+            valor        // Novo valor
+          })
+        });
 
-    // Botão de atualização manual
+        const result = await response.json();
+        console.log('Resposta do servidor:', result);
+
+        // Atualiza o cache local
+        cache.alteracoes[idLinha] = cache.alteracoes[idLinha] || {};
+        cache.alteracoes[idLinha][campo] = valor;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cache.alteracoes));
+      } catch (error) {
+        console.error('Erro ao salvar:', error);
+      }
+    }
+
+    // Função para mostrar o carregamento
+    function showLoading() {
+      document.getElementById('loading').style.display = 'block';
+    }
+
+    // Função para esconder o carregamento
+    function hideLoading() {
+      document.getElementById('loading').style.display = 'none';
+    }
+
+    // Função principal para buscar dados
+    async function fetchData() {
+      try {
+        showLoading();
+        
+        // Verificação de cache válido
+        if (cache.data && (Date.now() - cache.timestamp < 300000)) {
+          renderData(cache.data);
+          return;
+        }
+
+        // Fetch dos dados
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Erro HTTP: ${response.status}`);
+        
+        const rawData = await response.json();
+        
+        if (!Array.isArray(rawData)) {
+          throw new Error('Formato de dados inválido');
+        }
+
+        // Atualiza o cache com os dados da planilha
+        cache = { 
+          data: rawData,
+          timestamp: Date.now(),
+          alteracoes: JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}
+        };
+        
+        renderData(rawData);
+        
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        hideLoading();
+      }
+    }
+
+    // Eventos
+    document.addEventListener('DOMContentLoaded', fetchData);
     document.getElementById('atualizar-tabela').addEventListener('click', fetchData);
-
-    // Botão de download PDF
-    document.getElementById('download-pdf').addEventListener('click', gerarPDF);
   </script>
-  <!-- Biblioteca jsPDF para gerar PDF -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </body>
 </html>
