@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Visitantes</title>
+  <title>Controle de Visitantes</title>
   <style>
     * {
       margin: 0;
@@ -64,6 +64,11 @@
       border: none;
       border-radius: 5px;
       cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    .botao:hover {
+      background: #555;
     }
 
     .bloco-data {
@@ -86,41 +91,52 @@
       padding: 20px;
       color: #666;
     }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
   </style>
 </head>
 <body>
-  <h1>Visitantes</h1>
+  <h1>Registro de Visitantes</h1>
   <div class="botoes">
-    <button id="atualizar-tabela" class="botao">⟳ Atualizar</button>
+    <button id="atualizar-tabela" class="botao">⟳ Atualizar Tabela</button>
   </div>
   <div id="loading">Carregando dados...</div>
   <div id="tabela-container"></div>
 
   <script>
     const URL_SCRIPT = 'https://script.google.com/macros/s/AKfycbwj4KjrRP_DJiqqQsfcj1ri-K3zjc6Wx_PXmqBY6Z6V9IqivH-ceD6wX8gsbonnBtTFyg/exec';
-
-    // Controle de estado
     let dadosOriginais = [];
 
-    // Renderização otimizada
+    // Função principal de renderização
     function renderizarTabela(data) {
       const container = document.getElementById('tabela-container');
       container.innerHTML = '';
 
-      // Agrupa por data
+      // Agrupa registros por data
       const grupos = data.slice(1).reduce((acc, row) => {
-        const dataISO = row[8];
-        const dataFormatada = new Date(dataISO).toLocaleDateString('pt-BR', {
-          weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit'
-        });
-        
-        if (!acc[dataFormatada]) acc[dataFormatada] = [];
-        acc[dataFormatada].push(row);
+        try {
+          const dataBr = new Date(row[8]).toLocaleDateString('pt-BR', {
+            weekday: 'long',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+          });
+          
+          acc[dataBr] = acc[dataBr] || [];
+          acc[dataBr].push(row);
+        } catch {
+          console.warn('Data inválida na linha:', row);
+        }
         return acc;
       }, {});
 
-      // Cria os blocos
-      for (const [dataFormatada, linhas] of Object.entries(grupos)) {
+      // Cria os blocos de data
+      for (const [dataFormatada, registros] of Object.entries(grupos)) {
         const bloco = document.createElement('div');
         bloco.className = 'bloco-data';
         
@@ -131,7 +147,7 @@
               <tr>${data[0].map(h => `<th>${h}</th>`).join('')}</tr>
             </thead>
             <tbody>
-              ${linhas.map(linha => `
+              ${registros.map(linha => `
                 <tr data-id="${linha[8]}">
                   ${linha.map((celula, idx) => `
                     <td data-campo="${data[0][idx]}">
@@ -146,8 +162,12 @@
         
         container.appendChild(bloco);
       }
+
+      // Adiciona eventos após renderização
+      adicionarEventos();
     }
 
+    // Renderização condicional de células
     function renderizarCelula(cabecalho, valor) {
       if (cabecalho === 'STATUS') {
         return `
@@ -160,47 +180,58 @@
       }
       
       if (cabecalho === 'COMENTARIO') {
-        return `<input type="text" value="${valor || ''}" placeholder="Digite...">`;
+        return `<input type="text" value="${valor || ''}" placeholder="Digite seu comentário...">`;
       }
       
       return valor;
     }
 
-    // Comunicação com o Google Sheets
+    // Comunicação com Google Sheets
     async function salvarAlteracao(id, campo, valor) {
       try {
         const resposta = await fetch(URL_SCRIPT, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'text/plain', // Evita pré-vio CORS
+            'Accept': 'application/json'
+          },
           body: JSON.stringify({ id, campo, valor })
         });
-        
+
         const resultado = await resposta.json();
-        if (!resultado.success) throw new Error(resultado.message);
         
+        if (!resultado.success) {
+          throw new Error(resultado.message || 'Erro desconhecido');
+        }
+
+        // Atualização local imediata
+        const linha = document.querySelector(`[data-id="${id}"]`);
+        if (linha) {
+          const celula = linha.querySelector(`[data-campo="${campo}"]`);
+          if (campo === 'STATUS') {
+            celula.querySelector('select').value = valor;
+          } else if (campo === 'COMENTARIO') {
+            celula.querySelector('input').value = valor;
+          }
+        }
       } catch (erro) {
         console.error('Erro ao salvar:', erro);
-        alert('Erro ao salvar alteração. Tente novamente.');
+        alert('Erro ao salvar! Atualize a página e tente novamente.');
       }
     }
 
-    // Eventos
-    document.addEventListener('click', (e) => {
-      const select = e.target.closest('select');
-      const input = e.target.closest('input');
-      
-      if (select) {
-        const linha = select.closest('tr');
-        const campo = select.closest('td').dataset.campo;
-        salvarAlteracao(linha.dataset.id, campo, select.value);
-      }
-      
-      if (input) {
-        const linha = input.closest('tr');
-        const campo = input.closest('td').dataset.campo;
-        salvarAlteracao(linha.dataset.id, campo, input.value);
-      }
-    });
+    // Gerenciador de eventos
+    function adicionarEventos() {
+      document.querySelectorAll('select, input').forEach(elemento => {
+        elemento.addEventListener('change', (e) => {
+          const linha = e.target.closest('tr');
+          const campo = e.target.closest('td').dataset.campo;
+          const valor = e.target.value;
+          
+          salvarAlteracao(linha.dataset.id, campo, valor);
+        });
+      });
+    }
 
     // Carregamento inicial
     async function carregarDados() {
@@ -210,7 +241,7 @@
         dadosOriginais = await resposta.json();
         renderizarTabela(dadosOriginais);
       } catch (erro) {
-        alert('Erro ao cargar dados');
+        alert('Falha ao carregar dados! Recarregue a página.');
       } finally {
         document.getElementById('loading').style.display = 'none';
       }
