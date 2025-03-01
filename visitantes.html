@@ -162,8 +162,12 @@
         const result = await response.json();
         console.log('Resposta do servidor:', result);
 
-        // Atualiza a tabela após salvar
-        fetchData();
+        if (result.success) {
+          // Atualiza a tabela após salvar
+          fetchData();
+        } else {
+          console.error('Erro ao salvar:', result.message);
+        }
       } catch (error) {
         console.error('Erro ao salvar:', error);
       }
