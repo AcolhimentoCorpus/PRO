@@ -107,13 +107,6 @@
 
   <script>
     const url = 'https://script.google.com/macros/s/AKfycbwj4KjrRP_DJiqqQsfcj1ri-K3zjc6Wx_PXmqBY6Z6V9IqivH-ceD6wX8gsbonnBtTFyg/exec';
-    const STORAGE_KEY = 'visitantes_data';
-
-    let cache = {
-      data: null,
-      timestamp: null,
-      alteracoes: JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}
-    };
 
     // Função para renderizar os dados na tabela
     function renderData(data) {
@@ -138,7 +131,7 @@
       
       data.slice(1).forEach(row => {
         try {
-          const dataISO = row[0] || new Date().toISOString();
+          const dataISO = row[8] || new Date().toISOString(); // Carimbo de data/hora (coluna 8)
           const dataFormatada = new Date(dataISO).toLocaleDateString('pt-BR', {
             weekday: 'long',
             year: 'numeric',
@@ -171,9 +164,9 @@
 
       // Cabeçalho
       const trHead = document.createElement('tr');
-      ['Status', ...headers.slice(1), 'Data', 'Comentário'].forEach(header => {
+      headers.forEach(header => {
         const th = document.createElement('th');
-        th.textContent = header === 'De onde é?' ? 'De onde é' : header;
+        th.textContent = header;
         trHead.appendChild(th);
       });
       thead.appendChild(trHead);
@@ -183,62 +176,50 @@
       linhas.forEach((row, rowIndex) => {
         try {
           const tr = document.createElement('tr');
-          const idLinha = row[0]; // ID da linha (timestamp)
+          const idLinha = row[8]; // ID da linha (carimbo de data/hora)
 
-          // Status
-          const tdStatus = document.createElement('td');
-          const select = document.createElement('select');
-          
-          // Opções do dropdown
-          [
-            'Pendente', 
-            'Em contato com Caio', 
-            'Em contato com Pb. André'
-          ].forEach(opcao => {
-            const option = document.createElement('option');
-            option.textContent = opcao;
-            option.selected = (row[7] === opcao); // Coluna H (status)
-            select.appendChild(option);
-          });
-
-          // Evento para salvar alteração
-          select.addEventListener('change', () => {
-            salvarAlteracoes(idLinha, 'status', select.value);
-          });
-
-          tdStatus.appendChild(select);
-          tr.appendChild(tdStatus);
-
-          // Dados
-          row.slice(1).forEach((cell, index) => {
+          // Colunas
+          row.forEach((cell, index) => {
             const td = document.createElement('td');
-            if (headers[index + 1] === 'Telefone') {
-              td.innerHTML = `<a href="tel:${cell}">${formatarTelefone(cell)}</a>`;
-            } else {
+
+            // Status (menu suspenso)
+            if (headers[index] === 'STATUS') {
+              const select = document.createElement('select');
+              ['Pendente', 'Em contato com Caio', 'Em contato com Pb. André'].forEach(opcao => {
+                const option = document.createElement('option');
+                option.textContent = opcao;
+                option.selected = (cell === opcao);
+                select.appendChild(option);
+              });
+
+              // Evento para salvar alteração
+              select.addEventListener('change', () => {
+                salvarAlteracoes(idLinha, 'STATUS', select.value);
+              });
+
+              td.appendChild(select);
+            }
+            // Comentário (campo de texto)
+            else if (headers[index] === 'COMENTARIO') {
+              const input = document.createElement('input');
+              input.type = 'text';
+              input.value = cell || '';
+              input.placeholder = 'Digite...';
+
+              // Evento para salvar alteração
+              input.addEventListener('input', () => {
+                salvarAlteracoes(idLinha, 'COMENTARIO', input.value);
+              });
+
+              td.appendChild(input);
+            }
+            // Outras colunas
+            else {
               td.textContent = cell;
             }
+
             tr.appendChild(td);
           });
-
-          // Data
-          const tdData = document.createElement('td');
-          tdData.textContent = formatarData(row[0]);
-          tr.appendChild(tdData);
-
-          // Comentário
-          const tdComentario = document.createElement('td');
-          const inputComentario = document.createElement('input');
-          inputComentario.type = 'text';
-          inputComentario.placeholder = 'Digite...';
-          inputComentario.value = row[8] || ''; // Coluna I (comentário)
-
-          // Evento para salvar alteração
-          inputComentario.addEventListener('input', () => {
-            salvarAlteracoes(idLinha, 'comentario', inputComentario.value);
-          });
-
-          tdComentario.appendChild(inputComentario);
-          tr.appendChild(tdComentario);
 
           tbody.appendChild(tr);
         } catch (error) {
@@ -251,26 +232,6 @@
       return container;
     }
 
-    // Função para formatar telefone
-    function formatarTelefone(numero) {
-      try {
-        const nums = String(numero).replace(/\D/g, '');
-        return nums.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-      } catch {
-        return numero;
-      }
-    }
-
-    // Função para formatar data
-    function formatarData(dataISO) {
-      try {
-        const data = new Date(dataISO);
-        return data.toLocaleString('pt-BR');
-      } catch {
-        return 'Data inválida';
-      }
-    }
-
     // Função para salvar alterações
     async function salvarAlteracoes(idLinha, campo, valor) {
       try {
@@ -281,8 +242,8 @@
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            id: idLinha, // ID da linha (timestamp)
-            campo,       // Campo a ser atualizado (status ou comentario)
+            id: idLinha, // ID da linha (carimbo de data/hora)
+            campo,       // Campo a ser atualizado
             valor        // Novo valor
           })
         });
@@ -290,10 +251,8 @@
         const result = await response.json();
         console.log('Resposta do servidor:', result);
 
-        // Atualiza o cache local
-        cache.alteracoes[idLinha] = cache.alteracoes[idLinha] || {};
-        cache.alteracoes[idLinha][campo] = valor;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(cache.alteracoes));
+        // Atualiza a tabela após salvar
+        fetchData();
       } catch (error) {
         console.error('Erro ao salvar:', error);
       }
@@ -314,13 +273,7 @@
       try {
         showLoading();
         
-        // Verificação de cache válido
-        if (cache.data && (Date.now() - cache.timestamp < 300000)) {
-          renderData(cache.data);
-          return;
-        }
-
-        // Fetch dos dados
+        // Busca os dados diretamente da planilha
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Erro HTTP: ${response.status}`);
         
@@ -330,13 +283,6 @@
           throw new Error('Formato de dados inválido');
         }
 
-        // Atualiza o cache com os dados da planilha
-        cache = { 
-          data: rawData,
-          timestamp: Date.now(),
-          alteracoes: JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}
-        };
-        
         renderData(rawData);
         
       } catch (error) {
@@ -345,6 +291,9 @@
         hideLoading();
       }
     }
+
+    // Atualiza os dados automaticamente a cada 1 minuto
+    setInterval(fetchData, 60000);
 
     // Eventos
     document.addEventListener('DOMContentLoaded', fetchData);
