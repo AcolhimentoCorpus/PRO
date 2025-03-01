@@ -16,7 +16,6 @@
       background-color: #f4f4f4;
       padding: 20px;
       overflow-x: auto;
-      min-width: fit-content;
     }
 
     h1 {
@@ -29,11 +28,10 @@
       width: 100%;
       border-collapse: collapse;
       margin: 20px 0;
-      table-layout: auto;
     }
 
     th, td {
-      padding: 15px;
+      padding: 12px;
       border: 1px solid #ddd;
       text-align: left;
       white-space: nowrap;
@@ -41,25 +39,22 @@
 
     th {
       background-color: #000;
-      color: #fff;
+      color: white;
       position: sticky;
       top: 0;
     }
 
     select {
-      min-width: 200px;
+      width: 100%;
       padding: 8px;
       border: 2px solid #007BFF;
       border-radius: 4px;
       background: white;
-      cursor: pointer;
     }
 
     .botoes {
-      display: flex;
-      gap: 10px;
+      text-align: center;
       margin-bottom: 20px;
-      justify-content: center;
     }
 
     .botao {
@@ -72,7 +67,7 @@
     }
 
     .bloco-data {
-      margin: 30px 0;
+      margin: 25px 0;
       background: white;
       border-radius: 8px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -83,6 +78,7 @@
       background: #333;
       color: white;
       border-radius: 8px 8px 0 0;
+      margin: 0;
     }
 
     #loading {
@@ -101,59 +97,128 @@
   <div id="tabela-container"></div>
 
   <script>
-    const url = 'https://script.google.com/macros/s/AKfycbwj4KjrRP_DJiqqQsfcj1ri-K3zjc6Wx_PXmqBY6Z6V9IqivH-ceD6wX8gsbonnBtTFyg/exec';
+    const URL_SCRIPT = 'https://script.google.com/macros/s/AKfycbwj4KjrRP_DJiqqQsfcj1ri-K3zjc6Wx_PXmqBY6Z6V9IqivH-ceD6wX8gsbonnBtTFyg/exec';
 
-    // Função aprimorada para salvar alterações
-    async function salvarAlteracoes(idLinha, campo, valor) {
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: idLinha, campo, valor })
-        });
-
-        const result = await response.json();
-        
-        if (result.success) {
-          // Atualiza apenas a célula alterada localmente
-          document.querySelectorAll(`[data-id="${idLinha}"]`).forEach(linha => {
-            const celula = linha.querySelector(`td[data-campo="${campo}"]`);
-            if (celula) {
-              if (campo === 'STATUS') {
-                celula.querySelector('select').value = valor;
-              } else if (campo === 'COMENTARIO') {
-                celula.querySelector('input').value = valor;
-              }
-            }
-          });
-        } else {
-          alert(`Erro: ${result.message}`);
-        }
-      } catch (error) {
-        alert('Erro de conexão. Tente novamente.');
-      }
-    }
+    // Controle de estado
+    let dadosOriginais = [];
 
     // Renderização otimizada
-    function renderData(data) {
+    function renderizarTabela(data) {
       const container = document.getElementById('tabela-container');
       container.innerHTML = '';
 
-      data.slice(1).reduce((grupos, row) => {
+      // Agrupa por data
+      const grupos = data.slice(1).reduce((acc, row) => {
         const dataISO = row[8];
         const dataFormatada = new Date(dataISO).toLocaleDateString('pt-BR', {
           weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit'
         });
         
-        if (!grupos[dataFormatada]) grupos[dataFormatada] = [];
-        grupos[dataFormatada].push(row);
-        return grupos;
+        if (!acc[dataFormatada]) acc[dataFormatada] = [];
+        acc[dataFormatada].push(row);
+        return acc;
       }, {});
 
-      // ... (restante igual ao anterior, mas com data-id nas linhas)
+      // Cria os blocos
+      for (const [dataFormatada, linhas] of Object.entries(grupos)) {
+        const bloco = document.createElement('div');
+        bloco.className = 'bloco-data';
+        
+        bloco.innerHTML = `
+          <h2>${dataFormatada}</h2>
+          <table>
+            <thead>
+              <tr>${data[0].map(h => `<th>${h}</th>`).join('')}</tr>
+            </thead>
+            <tbody>
+              ${linhas.map(linha => `
+                <tr data-id="${linha[8]}">
+                  ${linha.map((celula, idx) => `
+                    <td data-campo="${data[0][idx]}">
+                      ${renderizarCelula(data[0][idx], celula)}
+                    </td>
+                  `).join('')}
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+        
+        container.appendChild(bloco);
+      }
     }
 
-    // Demais funções mantidas, mas com tratamento de erro aprimorado
+    function renderizarCelula(cabecalho, valor) {
+      if (cabecalho === 'STATUS') {
+        return `
+          <select>
+            <option ${valor === 'Pendente' ? 'selected' : ''}>Pendente</option>
+            <option ${valor === 'Em contato com Caio' ? 'selected' : ''}>Em contato com Caio</option>
+            <option ${valor === 'Em contato com Pb. André' ? 'selected' : ''}>Em contato com Pb. André</option>
+          </select>
+        `;
+      }
+      
+      if (cabecalho === 'COMENTARIO') {
+        return `<input type="text" value="${valor || ''}" placeholder="Digite...">`;
+      }
+      
+      return valor;
+    }
+
+    // Comunicação com o Google Sheets
+    async function salvarAlteracao(id, campo, valor) {
+      try {
+        const resposta = await fetch(URL_SCRIPT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, campo, valor })
+        });
+        
+        const resultado = await resposta.json();
+        if (!resultado.success) throw new Error(resultado.message);
+        
+      } catch (erro) {
+        console.error('Erro ao salvar:', erro);
+        alert('Erro ao salvar alteração. Tente novamente.');
+      }
+    }
+
+    // Eventos
+    document.addEventListener('click', (e) => {
+      const select = e.target.closest('select');
+      const input = e.target.closest('input');
+      
+      if (select) {
+        const linha = select.closest('tr');
+        const campo = select.closest('td').dataset.campo;
+        salvarAlteracao(linha.dataset.id, campo, select.value);
+      }
+      
+      if (input) {
+        const linha = input.closest('tr');
+        const campo = input.closest('td').dataset.campo;
+        salvarAlteracao(linha.dataset.id, campo, input.value);
+      }
+    });
+
+    // Carregamento inicial
+    async function carregarDados() {
+      try {
+        document.getElementById('loading').style.display = 'block';
+        const resposta = await fetch(URL_SCRIPT);
+        dadosOriginais = await resposta.json();
+        renderizarTabela(dadosOriginais);
+      } catch (erro) {
+        alert('Erro ao cargar dados');
+      } finally {
+        document.getElementById('loading').style.display = 'none';
+      }
+    }
+
+    // Inicialização
+    carregarDados();
+    document.getElementById('atualizar-tabela').addEventListener('click', carregarDados);
   </script>
 </body>
 </html>
